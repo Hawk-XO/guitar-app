@@ -351,6 +351,14 @@ function togglePlay() {
     const last = state.index >= state.timeline.events.length - 1;
     player.play(last ? 0 : state.index);
     setPlaying(true);
+    // warn when the browser keeps audio blocked
+    setTimeout(() => {
+      const ctx = engine.ctx;
+      if (player.playing && ctx && ctx.state !== 'running') {
+        ctx.resume();
+        toast('Your browser is blocking sound for this page. Click the page once, check the tab isn’t muted, then press Play again.', 7000);
+      }
+    }, 600);
   }
 }
 $('play').addEventListener('click', togglePlay);

@@ -245,28 +245,44 @@ export class Player {
     this.schedulePass(t, fromIndex);
   }
 
+  // Schedules one pass of the timeline with a short look-ahead window, so long songs don't create
+  // thousands of audio nodes at once (some browsers, e.g. Opera GX, go silent when that happens).
   schedulePass(t0, fromIndex) {
     const { events, bars, total } = this.timeline;
     const spq = this.spq;
     const offset = events[fromIndex]?.start || 0;
-    // metronome
+    const clicks = [];
     bars.forEach((b) => {
       const n = Math.round(b.length / this.clickUnit);
       for (let k = 0; k < n; k++) {
         const beat = b.start + k * this.clickUnit;
-        if (beat < offset - 1e-6) continue;
-        this.engine.click(t0 + (beat - offset) * spq, b.full && k === 0, this.metBus);
+        if (beat >= offset - 1e-6) clicks.push({ time: t0 + (beat - offset) * spq, accent: b.full && k === 0 });
       }
     });
-    // notes
+    const notes = [];
     for (let i = fromIndex; i < events.length; i++) {
       const ev = events[i];
-      const time = t0 + (ev.start - offset) * spq;
-      const secs = ev.beats * spq;
-      this.engine.playEvent(ev, time, secs, this.gtrBus);
-      this.at(time, () => this.onStep?.(i, secs * 1000));
+      notes.push({ i, ev, time: t0 + (ev.start - offset) * spq, secs: ev.beats * spq });
     }
     const end = t0 + (total - offset) * spq;
+    let ci = 0;
+    let ni = 0;
+    const AHEAD = 1.2; // seconds
+    const pump = () => {
+      if (!this.playing) return;
+      const horizon = this.engine.ctx.currentTime + AHEAD;
+      while (ci < clicks.length && clicks[ci].time < horizon) {
+        const c = clicks[ci++];
+        this.engine.click(Math.max(c.time, this.engine.ctx.currentTime), c.accent, this.metBus);
+      }
+      while (ni < notes.length && notes[ni].time < horizon) {
+        const { i, ev, time, secs } = notes[ni++];
+        this.engine.playEvent(ev, Math.max(time, this.engine.ctx.currentTime), secs, this.gtrBus);
+        this.at(time, () => this.onStep?.(i, secs * 1000));
+      }
+      if (ci < clicks.length || ni < notes.length) this.timers.push(setTimeout(pump, 250));
+    };
+    pump();
     this.at(end, () => {
       if (this.loop) this.schedulePass(this.engine.ctx.currentTime + 0.02, 0);
       else this.stop();
