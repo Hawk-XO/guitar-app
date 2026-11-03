@@ -58,9 +58,16 @@
         <button id="loop" class="toggle on" title="Repeat the exercise">Loop</button>
         <button id="sound" class="toggle on" title="Reference guitar sound on/off">Guitar sound</button>
         <select id="tone" title="Guitar tone" aria-label="Guitar tone">
-          <option value="acoustic">Acoustic</option>
-          <option value="clean">Clean electric</option>
-          <option value="dist">Distorted electric</option>
+          <optgroup label="Real guitar samples">
+            <option value="sample-clean">Electric clean</option>
+            <option value="sample-dist">Electric distorted</option>
+            <option value="sample-acoustic">Acoustic steel</option>
+          </optgroup>
+          <optgroup label="Synth">
+            <option value="clean">Clean electric (synth)</option>
+            <option value="dist">Distorted electric (synth)</option>
+            <option value="acoustic">Acoustic (synth)</option>
+          </optgroup>
         </select>
       </div>
     </header>

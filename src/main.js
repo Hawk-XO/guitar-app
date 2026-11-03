@@ -400,13 +400,32 @@ $('speed').addEventListener('change', (e) => {
 });
 
 // guitar tone
-$('tone').value = store.get('tone', 'acoustic');
-engine.setTone($('tone').value);
+$('tone').value = store.get('tone', 'sample-clean');
+if (!$('tone').value) $('tone').value = 'sample-clean';
+engine.tone = $('tone').value; // applied (and samples loaded) when audio first starts
+async function applyTone(preview) {
+  const tone = $('tone').value;
+  engine.ensure();
+  const sample = tone.startsWith('sample-');
+  if (sample) $('tone').classList.add('loading');
+  try {
+    if (sample) toast('Loading guitar samples…', 1500);
+    await engine.setTone(tone);
+    if (sample) toast('Guitar samples ready.', 1200);
+  } catch (err) {
+    toast(`${err.message} Using the synth sound instead.`, 5000);
+  } finally {
+    $('tone').classList.remove('loading');
+  }
+  if (preview && $('sound').classList.contains('on') && !player.playing)
+    engine.preview({ notes: [{ s: 6, f: 0 }, { s: 5, f: 2 }, { s: 4, f: 2 }], strum: true, pick: 'd', beats: 1 }, 1);
+}
 $('tone').addEventListener('change', (e) => {
   store.set('tone', e.target.value);
-  engine.setTone(e.target.value);
-  if ($('sound').classList.contains('on')) engine.preview({ notes: [{ s: 6, f: 0 }, { s: 5, f: 2 }, { s: 4, f: 2 }], strum: true, pick: 'd', beats: 1 }, 1);
+  applyTone(true);
 });
+// load the chosen samples on the first click anywhere (browsers only allow audio after a click)
+window.addEventListener('pointerdown', () => applyTone(false), { once: true });
 
 function bindToggle(id, key, onChange) {
   const b = $(id);

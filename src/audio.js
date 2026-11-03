@@ -2,6 +2,92 @@
 
 import { midiOf, freqOf } from './theory.js';
 
+// Plays real recorded guitar notes (FluidR3 GM soundfont, CC BY 3.0 — see assets/sounds/CREDITS.md).
+// One MP3 per note from E2 (midi 40) to E6 (midi 88); a set is downloaded the first time it's used.
+const SAMPLE_SETS = { 'sample-acoustic': 'acoustic', 'sample-clean': 'clean', 'sample-dist': 'dist' };
+const SAMPLE_GAIN = { acoustic: 1.1, clean: 1.0, dist: 0.55, muted: 1.0 };
+
+export class Sampler {
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.sets = {}; // name -> Map(midi -> AudioBuffer)
+    this.loading = {};
+  }
+
+  isSampleTone(tone) {
+    return tone in SAMPLE_SETS;
+  }
+
+  setFor(tone) {
+    return SAMPLE_SETS[tone] || null;
+  }
+
+  has(set) {
+    return !!this.sets[set];
+  }
+
+  loadFor(tone) {
+    return Promise.all([this.load(SAMPLE_SETS[tone]), this.load('muted')]);
+  }
+
+  load(set) {
+    if (this.sets[set]) return Promise.resolve();
+    if (!this.loading[set]) {
+      const base = new URL(`../assets/sounds/${set}/`, import.meta.url);
+      const jobs = [];
+      const map = new Map();
+      for (let m = 40; m <= 88; m++) {
+        jobs.push(
+          fetch(new URL(`${m}.mp3`, base))
+            .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status))))
+            .then((b) => this.ctx.decodeAudioData(b))
+            .then((buf) => map.set(m, buf))
+            .catch(() => {}),
+        );
+      }
+      this.loading[set] = Promise.all(jobs).then(() => {
+        if (map.size < 10) throw new Error(`Couldn't load the ${set} guitar samples.`);
+        this.sets[set] = map;
+      });
+    }
+    return this.loading[set];
+  }
+
+  // nearest recorded note, re-pitched if needed
+  pick(set, midi) {
+    const map = this.sets[set];
+    if (map.has(midi)) return [map.get(midi), 1];
+    let best = null;
+    for (const k of map.keys()) if (best == null || Math.abs(k - midi) < Math.abs(best - midi)) best = k;
+    return [map.get(best), Math.pow(2, (midi - best) / 12)];
+  }
+
+  play(set, midi, time, seconds, dest, { gain = 1, release = 0.12, lowpass = 0 } = {}) {
+    const ctx = this.ctx;
+    const [buf, rate] = this.pick(set, Math.max(40, Math.min(88, midi)));
+    if (!buf) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    const g = ctx.createGain();
+    const level = 0.55 * gain * (SAMPLE_GAIN[set] || 1);
+    const hold = Math.max(0.03, Math.min(seconds + 0.05, buf.duration / rate - release));
+    g.gain.setValueAtTime(level, time);
+    g.gain.setValueAtTime(level, time + hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + hold + release);
+    let node = src;
+    if (lowpass) {
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = lowpass;
+      node = src.connect(lp);
+    }
+    node.connect(g).connect(dest);
+    src.start(time);
+    src.stop(time + hold + release + 0.02);
+  }
+}
+
 export class AudioEngine {
   ensure() {
     if (!this.ctx) {
@@ -53,12 +139,16 @@ export class AudioEngine {
     this.drive.connect(this.shaper).connect(hp).connect(mid).connect(cab).connect(out).connect(this.master);
   }
 
-  // tone: 'acoustic' | 'clean' | 'dist'
+  // Synth tones: 'acoustic' | 'clean' | 'dist'. Sample tones: 'sample-acoustic' | 'sample-clean' | 'sample-dist'.
+  // Returns a promise that resolves when the samples for the tone are ready (instantly for synths).
   setTone(tone) {
     this.tone = tone;
-    if (!this.ctx) return;
+    if (!this.ctx) return Promise.resolve();
     this.gtrGain.disconnect();
+    // only the synth distortion goes through the amp chain; distorted samples are already distorted
     this.gtrGain.connect(tone === 'dist' ? this.drive : this.cleanOut);
+    if (!this.sampler) this.sampler = new Sampler(this.ctx);
+    return this.sampler.isSampleTone(tone) ? this.sampler.loadFor(tone) : Promise.resolve();
   }
 
   setLevels({ metOn, metVol, gtrOn }) {
@@ -88,6 +178,8 @@ export class AudioEngine {
   }
 
   pluck(midi, time, seconds, dest) {
+    const set = this.sampler?.setFor(this.tone);
+    if (set && this.sampler.has(set)) return this.sampler.play(set, midi, time, seconds, dest);
     if (this.tone === 'clean' || this.tone === 'dist') return this.pluckElectric(midi, time, seconds, dest);
     const ctx = this.ctx;
     const f = freqOf(midi);
@@ -155,35 +247,65 @@ export class AudioEngine {
     filt.connect(g).connect(dest);
   }
 
-  // Dead / muted note (✕): short percussive scratch, no pitch.
-  deadNote(time, dest) {
+  // Dead / muted note (✕). The string is touched but not pressed, so you hear a short, choked
+  // "chk" that still follows the string's pitch: a heavily damped pluck plus a pick-scrape transient.
+  deadNote(midi, time, dest) {
     const ctx = this.ctx;
-    const len = Math.floor(ctx.sampleRate * 0.05);
+    if (this.sampler?.isSampleTone(this.tone) && this.sampler.has('muted')) {
+      this.sampler.play('muted', midi, time, 0.09, dest, { gain: 0.9, lowpass: 2600 });
+    } else {
+      const f = freqOf(midi);
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = f;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(Math.min(3000, f * 6), time);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(150, f), time + 0.05);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.exponentialRampToValueAtTime(0.16, time + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.07);
+      o.connect(lp).connect(g).connect(dest);
+      o.start(time);
+      o.stop(time + 0.09);
+    }
+    // pick scrape, tuned a little to the string
+    const len = Math.floor(ctx.sampleRate * 0.035);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4);
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = 1800;
-    bp.Q.value = 0.9;
-    const g = ctx.createGain();
-    g.gain.value = 0.35;
-    src.connect(bp).connect(g).connect(dest);
+    bp.frequency.value = Math.min(4000, freqOf(midi) * 8);
+    bp.Q.value = 1.2;
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.18;
+    src.connect(bp).connect(g2).connect(dest);
     src.start(time);
   }
 
   // Sound one tab event (single note or strummed chord) at `time`.
   playEvent(ev, time, seconds, dest = this.gtrGain) {
     if (!ev || ev.rest || ev.tie) return;
-    if (ev.pm) seconds = Math.min(seconds, 0.18); // palm mute: short, damped
     const notes = [...ev.notes].sort((a, b) => (ev.pick === 'u' ? a.s - b.s : b.s - a.s));
     notes.forEach((n, k) => {
       const t = time + (ev.strum ? k * 0.014 : 0);
-      if (n.dead || ev.dead) this.deadNote(t, dest);
-      else this.pluck(midiOf(n.s, n.f), t, seconds, dest);
+      const midi = midiOf(n.s, n.f);
+      if (n.dead || ev.dead) this.deadNote(midi, t, dest);
+      else if (ev.pm) this.palmMute(midi, t, seconds, dest);
+      else this.pluck(midi, t, seconds, dest);
     });
+  }
+
+  // Palm mute: real muted-guitar samples when a sample tone is on, otherwise a short synth pluck.
+  palmMute(midi, time, seconds, dest) {
+    if (this.sampler?.isSampleTone(this.tone) && this.sampler.has('muted')) {
+      const set = this.tone === 'sample-dist' && this.sampler.has('dist') ? 'dist' : 'muted';
+      this.sampler.play(set, midi, time, Math.min(seconds, 0.22), dest, { gain: set === 'dist' ? 0.7 : 1, release: 0.05, lowpass: set === 'dist' ? 1800 : 0 });
+    } else this.pluck(midi, time, Math.min(seconds, 0.18), dest);
   }
 
   // Preview a single event right now (used when stepping through notes).

@@ -225,3 +225,4 @@ button:disabled { opacity: 0.5; cursor: default; }
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #0d0f12; border: 1px solid #3a404b; border-radius: 8px; padding: 8px 14px; z-index: 70; font-size: 13px; }
 .toast[hidden] { display: none; }
 .cslider[data-for="metVol"] { width: 70px; }
+#tone.loading { opacity: 0.6; }

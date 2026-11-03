@@ -29,7 +29,7 @@ Personal guitar-learning web app for a right-handed beginner on an ESP LTD Viper
 - Importers in `src/import/`: MusicXML (+ .mxl via a tiny zip reader using DecompressionStream), MIDI (busiest non-drum track, 16th grid), text tab (spacing → durations). Pitch-only notes get frets via a beam search (`frets.js`), fingers via one-finger-per-fret. Dead notes (`dead`) render as x and sound as a click.
 - Song format: `{ title, tempo, meter, bars, source }`, bars as in exercises.
 - Tempo: auto per exercise (`GRADE_TEMPO`, doubled for 6/8) or song tempo; editable number + slider; practice speed % (player.bpm = tempo × speed).
-- Tones: `engine.setTone('acoustic'|'clean'|'dist')`; distortion = waveshaper + cab EQ chain.
+- Tones: synth `'acoustic'|'clean'|'dist'` (distortion = waveshaper + cab EQ) and samples `'sample-acoustic'|'sample-clean'|'sample-dist'` via `Sampler` (one MP3 per MIDI note 40–88 in `assets/sounds/<set>/`, lazy-loaded, nearest-note repitch). Dead notes and palm mutes use the `muted` sample set at the note's pitch (synth fallback: damped pitched pluck + scrape).
 - Sliders: `src/slider.js` replaces every range input with a drawn one (thumb asset `assets/ui/slider-thumb.svg`); call `syncSliders()` after setting a value in code.
 - Guitar Pro files and picture PDFs are not parsed: user exports MusicXML first. Do not transcribe copyrighted songs note by note.
 

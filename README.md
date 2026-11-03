@@ -35,7 +35,7 @@ Needs an internet connection the first time (three.js loads from a CDN).
 | Save file | Download a song as JSON for the `songs/` folder (see `songs/README.md`) |
 | Tempo number | Click and type a tempo; it's set automatically per exercise/song. **Auto** resets it |
 | Speed | Practice at 25–100% of the tempo |
-| Tone | Acoustic, Clean electric or Distorted electric |
+| Tone | Real guitar samples (electric clean, electric distorted, acoustic steel) or the synth tones. Samples download the first time you pick one |
 
 **Picture-only PDFs** (scanned or exported images) can't be read directly. Convert them to MusicXML with a sheet-music reader such as Audiveris (free) or MuseScore.com's PDF import, then use **+ Add song**.
 
@@ -59,6 +59,7 @@ src/songs.js        song library (songs/ folder + this browser)
 src/slider.js       custom sliders (consistent look in Opera GX and other browsers)
 songs/              songs shown to everyone on the site (index.json lists them)
 assets/             hand models (MIT, see HAND-MODEL-LICENSE.md)
+assets/sounds/      recorded guitar notes (FluidR3 GM, CC BY 3.0, see CREDITS.md)
 ```
 
 See `CLAUDE.md` for the roadmap and conventions.
