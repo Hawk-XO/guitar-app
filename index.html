@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fretboard coach</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Fretboard coach</div>
+      <div class="pickers">
+        <label>Grade <select id="grade"></select></label>
+        <label>Day <select id="day"></select></label>
+        <label>Exercise <select id="exercise"></select></label>
+      </div>
+      <div class="transport">
+        <button id="restart" title="Back to start" aria-label="Back to start">⏮</button>
+        <button id="prev" title="Previous note (←)" aria-label="Previous note">◀</button>
+        <button id="play" class="primary" title="Play / pause (space)">▶ Play</button>
+        <button id="next" title="Next note (→)" aria-label="Next note">▶</button>
+        <label class="bpm">
+          <span id="bpmLabel">♩ = 60</span>
+          <input id="bpm" type="range" min="30" max="160" step="1" value="60" />
+        </label>
+        <button id="metro" class="toggle on" title="Metronome on/off (M)">Click on</button>
+        <input id="metVol" type="range" min="0" max="1" step="0.05" value="0.6" title="Metronome volume" aria-label="Metronome volume" />
+        <button id="countIn" class="toggle on" title="One bar of clicks before playing">Count-in</button>
+        <button id="loop" class="toggle on" title="Repeat the exercise">Loop</button>
+        <button id="sound" class="toggle on" title="Reference guitar sound">Guitar sound</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel hand-panel">
+        <div class="panel-head">
+          <span>Left hand</span>
+          <span class="muted small">palm facing you · click a finger</span>
+        </div>
+        <div id="handSvg"></div>
+        <div id="handText" class="hand-text"></div>
+      </section>
+
+      <section class="panel notes-panel">
+        <div class="panel-head">
+          <span id="exTitle">Notes and tab</span>
+          <span class="head-right">
+            <span id="position" class="muted small"></span>
+            <button id="guideBtn" class="help" title="How to read tab" aria-label="How to read tab">?</button>
+          </span>
+        </div>
+        <div id="exTip" class="ex-tip"></div>
+        <div id="tab" class="tab-scroller"></div>
+        <div id="guide" class="guide" hidden></div>
+        <div id="countBadge" class="count-badge" hidden></div>
+      </section>
+
+      <section class="panel guitar-panel">
+        <div class="panel-head">
+          <span>Guitar <span class="muted small">· drag to rotate, scroll to zoom, right-drag to pan</span></span>
+          <span id="views" class="views"></span>
+        </div>
+        <div id="guitar" class="guitar-canvas"></div>
+        <div class="legend">
+          <span><i style="background: #378add"></i>1 index</span>
+          <span><i style="background: #639922"></i>2 middle</span>
+          <span><i style="background: #ef9f27"></i>3 ring</span>
+          <span><i style="background: #e24b4a"></i>4 pinky</span>
+          <span><i class="ring"></i>open string</span>
+          <span class="x">✕ don’t play</span>
+          <span><i class="ghost"></i>next note</span>
+          <span><i style="background: #f08a24"></i>pick</span>
+        </div>
+      </section>
+    </main>
+
+    <div id="tooltip" class="tooltip" hidden></div>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
