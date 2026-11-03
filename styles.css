@@ -179,3 +179,49 @@ input[type="range"] { accent-color: var(--accent); }
 .hand-alpha { width: 70px; margin-right: 8px; }
 .views { align-items: center; }
 .tab-tech { fill: #9aa1ad; font-size: 10px; text-anchor: middle; font-style: italic; }
+
+/* ---- library mode switch */
+.mode { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.mode button { border: 0; border-radius: 0; background: transparent; color: var(--muted); padding: 5px 12px; }
+.mode button.on { background: var(--accent-bg); color: var(--text); }
+.pickers[hidden] { display: none; }
+
+/* ---- tempo */
+.bpm-sym { min-width: 0 !important; color: var(--muted); }
+.bpm-num {
+  width: 52px; text-align: center; font-weight: 600;
+  background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 2px;
+  -moz-appearance: textfield; appearance: textfield; cursor: text;
+}
+.bpm-num:hover { border-color: var(--border); }
+.bpm-num:focus { outline: none; border-color: var(--accent); background: var(--panel-2); }
+.bpm-num::-webkit-outer-spin-button, .bpm-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.small-btn { font-size: 12px; padding: 3px 8px; }
+#speed, #tone { font-size: 13px; }
+
+/* ---- custom slider (same look in every browser) */
+.cslider { position: relative; width: 90px; height: 18px; cursor: pointer; touch-action: none; flex: none; outline: none; }
+.cslider-track { position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 2px; background: #3a404b; overflow: hidden; }
+.cslider-fill { height: 100%; background: var(--accent); }
+.cslider-thumb {
+  position: absolute; top: 1px; width: 16px; height: 16px; margin-left: -8px;
+  background: url('assets/ui/slider-thumb.svg') center / contain no-repeat;
+  transition: transform 0.1s;
+}
+.cslider:hover .cslider-thumb, .cslider.drag .cslider-thumb, .cslider:focus-visible .cslider-thumb { transform: scale(1.15); }
+.cslider:focus-visible .cslider-track { box-shadow: 0 0 0 2px #4b9be855; }
+.hand-alpha.cslider { width: 70px; margin-right: 8px; }
+
+/* ---- import dialog + toast */
+.import-panel { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 60; }
+.import-panel[hidden] { display: none; }
+.import-card { width: min(440px, 92vw); background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.import-head { font-weight: 600; font-size: 16px; }
+.import-card label { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--muted); }
+.import-card input[type="text"], .import-card input[type="number"] { flex: 1; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+.import-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.imp-error { color: #f09595; font-size: 13px; }
+button:disabled { opacity: 0.5; cursor: default; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #0d0f12; border: 1px solid #3a404b; border-radius: 8px; padding: 8px 14px; z-index: 70; font-size: 13px; }
+.toast[hidden] { display: none; }
+.cslider[data-for="metVol"] { width: 70px; }

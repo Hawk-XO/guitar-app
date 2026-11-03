@@ -71,7 +71,7 @@ export class TabView {
         ev.notes.forEach((n) => {
           const cls = ev.tie ? 'tab-num tie' : 'tab-num';
           const box = el('rect', { x: ex - 8, y: lineY(n.s) - 7, width: 16, height: 14, rx: 3, class: 'tab-numbg' });
-          const txt = ev.tie ? `(${n.f})` : ev.slideFrom != null ? `/${n.f}` : String(n.f);
+          const txt = n.dead ? 'x' : ev.tie ? `(${n.f})` : ev.slideFrom != null ? `/${n.f}` : String(n.f);
           const t = el('text', { x: ex, y: lineY(n.s) + 4.5, class: cls }, txt);
           const hit = el('rect', { x: ex - 10, y: lineY(n.s) - 8, width: 20, height: 16, class: 'tab-hit' });
           hit.addEventListener('mouseenter', (e) => this.showTip(e, n, ev));

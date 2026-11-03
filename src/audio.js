@@ -12,11 +12,53 @@ export class AudioEngine {
       this.metGain = this.ctx.createGain();
       this.metGain.connect(this.master);
       this.gtrGain = this.ctx.createGain();
-      this.gtrGain.connect(this.master);
+      this.buildAmp();
+      this.setTone(this.tone || 'acoustic');
       this.applyLevels();
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
     return this.ctx;
+  }
+
+  // Amp chain for the distorted tone: pre-gain → waveshaper → cabinet EQ.
+  buildAmp() {
+    const ctx = this.ctx;
+    this.cleanOut = ctx.createGain();
+    this.cleanOut.connect(this.master);
+    this.drive = ctx.createGain();
+    this.drive.gain.value = 9;
+    this.shaper = ctx.createWaveShaper();
+    const n = 2048;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1;
+      curve[i] = Math.tanh(x * 3.2) * 0.9;
+    }
+    this.shaper.curve = curve;
+    this.shaper.oversample = '4x';
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 90;
+    const mid = ctx.createBiquadFilter();
+    mid.type = 'peaking';
+    mid.frequency.value = 800;
+    mid.gain.value = 3;
+    mid.Q.value = 0.8;
+    const cab = ctx.createBiquadFilter();
+    cab.type = 'lowpass';
+    cab.frequency.value = 4200;
+    cab.Q.value = 0.7;
+    const out = ctx.createGain();
+    out.gain.value = 0.32;
+    this.drive.connect(this.shaper).connect(hp).connect(mid).connect(cab).connect(out).connect(this.master);
+  }
+
+  // tone: 'acoustic' | 'clean' | 'dist'
+  setTone(tone) {
+    this.tone = tone;
+    if (!this.ctx) return;
+    this.gtrGain.disconnect();
+    this.gtrGain.connect(tone === 'dist' ? this.drive : this.cleanOut);
   }
 
   setLevels({ metOn, metVol, gtrOn }) {
@@ -46,6 +88,7 @@ export class AudioEngine {
   }
 
   pluck(midi, time, seconds, dest) {
+    if (this.tone === 'clean' || this.tone === 'dist') return this.pluckElectric(midi, time, seconds, dest);
     const ctx = this.ctx;
     const f = freqOf(midi);
     const decay = seconds <= 0.18 ? 0.22 : Math.min(Math.max(seconds + 0.25, 0.5), 2.6);
@@ -75,12 +118,72 @@ export class AudioEngine {
     o2.stop(time + decay + 0.05);
   }
 
+  // Electric: brighter, longer sustain, two slightly detuned oscillators (pickup + chorus feel).
+  pluckElectric(midi, time, seconds, dest) {
+    const ctx = this.ctx;
+    const f = freqOf(midi);
+    const dist = this.tone === 'dist';
+    const short = seconds <= 0.18;
+    const decay = short ? 0.2 : Math.min(Math.max(seconds + 0.15, 0.4), dist ? 3.5 : 3);
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.Q.value = dist ? 0.7 : 1.4;
+    filt.frequency.setValueAtTime(Math.min(dist ? 5000 : 7000, f * 12), time);
+    filt.frequency.exponentialRampToValueAtTime(Math.max(dist ? 900 : 500, f * (dist ? 4 : 2.5)), time + (short ? 0.08 : 0.6));
+    const g = ctx.createGain();
+    const peak = dist ? 0.12 : 0.16;
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(peak, time + 0.003);
+    g.gain.exponentialRampToValueAtTime(peak * (dist ? 0.7 : 0.45), time + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + decay);
+    const oscs = [
+      ['sawtooth', f, 0, 1],
+      ['square', f, 6, 0.35],
+      ['sawtooth', f * 2, -5, 0.15],
+    ];
+    oscs.forEach(([type, freq, detune, level]) => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = freq;
+      o.detune.value = detune;
+      const og = ctx.createGain();
+      og.gain.value = level;
+      o.connect(og).connect(filt);
+      o.start(time);
+      o.stop(time + decay + 0.05);
+    });
+    filt.connect(g).connect(dest);
+  }
+
+  // Dead / muted note (✕): short percussive scratch, no pitch.
+  deadNote(time, dest) {
+    const ctx = this.ctx;
+    const len = Math.floor(ctx.sampleRate * 0.05);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1800;
+    bp.Q.value = 0.9;
+    const g = ctx.createGain();
+    g.gain.value = 0.35;
+    src.connect(bp).connect(g).connect(dest);
+    src.start(time);
+  }
+
   // Sound one tab event (single note or strummed chord) at `time`.
   playEvent(ev, time, seconds, dest = this.gtrGain) {
     if (!ev || ev.rest || ev.tie) return;
     if (ev.pm) seconds = Math.min(seconds, 0.18); // palm mute: short, damped
     const notes = [...ev.notes].sort((a, b) => (ev.pick === 'u' ? a.s - b.s : b.s - a.s));
-    notes.forEach((n, k) => this.pluck(midiOf(n.s, n.f), time + (ev.strum ? k * 0.014 : 0), seconds, dest));
+    notes.forEach((n, k) => {
+      const t = time + (ev.strum ? k * 0.014 : 0);
+      if (n.dead || ev.dead) this.deadNote(t, dest);
+      else this.pluck(midiOf(n.s, n.f), t, seconds, dest);
+    });
   }
 
   // Preview a single event right now (used when stepping through notes).

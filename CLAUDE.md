@@ -24,6 +24,15 @@ Personal guitar-learning web app for a right-handed beginner on an ESP LTD Viper
 - Playback: play/pause, step, restart, loop, tempo, count-in, mutable metronome with volume and accented beat 1, synth reference tone (palm mutes are short). Settings persist in localStorage.
 - All Grades 1–6 transcribed (109 exercises). Fingerings for single notes and some rhythms in Grades 3–6 are best-effort readings of the PDF.
 
+## Songs (added)
+- Mode switch Grades/Songs. Songs = `songs/index.json` (repo, public on the site) + imported songs in localStorage (`fc.songs`).
+- Importers in `src/import/`: MusicXML (+ .mxl via a tiny zip reader using DecompressionStream), MIDI (busiest non-drum track, 16th grid), text tab (spacing → durations). Pitch-only notes get frets via a beam search (`frets.js`), fingers via one-finger-per-fret. Dead notes (`dead`) render as x and sound as a click.
+- Song format: `{ title, tempo, meter, bars, source }`, bars as in exercises.
+- Tempo: auto per exercise (`GRADE_TEMPO`, doubled for 6/8) or song tempo; editable number + slider; practice speed % (player.bpm = tempo × speed).
+- Tones: `engine.setTone('acoustic'|'clean'|'dist')`; distortion = waveshaper + cab EQ chain.
+- Sliders: `src/slider.js` replaces every range input with a drawn one (thumb asset `assets/ui/slider-thumb.svg`); call `syncSliders()` after setting a value in code.
+- Guitar Pro files and picture PDFs are not parsed: user exports MusicXML first. Do not transcribe copyrighted songs note by note.
+
 ## Next steps (after the user has tried it)
 1. Tune hand poses from user feedback (finger curl, wrist angle, thumb, pick grip). Consider per-chord overrides in `chords.js` (e.g. `hand: { knuckleHeight, thumb }`).
 2. Check transcriptions against the PDF where the user spots a mismatch.

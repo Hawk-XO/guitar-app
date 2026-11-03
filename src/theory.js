@@ -44,9 +44,18 @@ function aliasText(name) {
 }
 
 // Returns a short title and a list of plain-English lines for one note on the tab.
-export function explainNote({ s, f, fi }) {
+export function explainNote({ s, f, fi, dead }) {
   const name = noteName(midiOf(s, f));
   const lines = [];
+  if (dead) {
+    return {
+      title: `Dead note · string ${s}`,
+      lines: [
+        `x on line ${s} = a muted "dead" note on the ${STRING_LABEL[s]} string.`,
+        'Rest your fretting fingers lightly on the string (don’t press it down) and pick: you get a percussive click instead of a note.',
+      ],
+    };
+  }
   lines.push(`Tab line ${s} from the top = string ${s}, the ${STRING_LABEL[s]} string.`);
   if (f === 0) {
     lines.push('0 means play the string open: don’t press anything, just pick it.');

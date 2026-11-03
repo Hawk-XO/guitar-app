@@ -399,6 +399,13 @@ export class Guitar3D {
   addNoteMarker(n, alpha) {
     const u = fingerU(n.f);
     const y = stringY(n.s, Math.max(u, 0));
+    if (n.dead) {
+      const x = crossSprite();
+      x.material.color.set(0xcfd3d8);
+      x.position.set(X(n.f === 0 ? fingerU(3) : u), stringY(n.s, Math.max(u, 0)), STRING_Z + 0.15);
+      this.markers.add(x);
+      return;
+    }
     if (n.f === 0) {
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(0.2, 0.05, 8, 24),

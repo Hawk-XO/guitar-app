@@ -5,6 +5,9 @@ import { TabView } from './tab.js';
 import { HandPanel } from './hand2d.js';
 import { AudioEngine, Player } from './audio.js';
 import { TAB_GUIDE } from './theory.js';
+import { upgradeAll, syncSliders } from './slider.js';
+import { loadLibrary, saveLocal, removeLocal, downloadSong } from './songs.js';
+import { importFile, ACCEPT } from './import/index.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -24,6 +27,11 @@ const store = {
 };
 
 const state = {
+  mode: store.get('mode', 'grades'),
+  songId: store.get('songId', null),
+  songs: [],
+  tempo: 60, // the music's tempo as set by the user (before practice speed)
+  autoTempo: 60,
   grade: store.get('grade', 0),
   day: store.get('day', 0),
   ex: store.get('ex', 0),
@@ -129,23 +137,169 @@ $('exercise').addEventListener('change', (e) => {
   loadExercise();
 });
 
+// Sensible starting tempo per grade (beginner exercises start slow). 6/8 counts eighth notes.
+const GRADE_TEMPO = { 1: 60, 2: 65, 3: 70, 4: 75, 5: 80, 6: 85 };
+function exerciseTempo(grade, ex, meter) {
+  if (ex.tempo) return ex.tempo;
+  const t = GRADE_TEMPO[grade] || 70;
+  return meter[1] === 8 ? t * 2 : t;
+}
+
 function loadExercise() {
   const day = COURSE[state.grade].days[state.day];
   const ex = day.exercises[state.ex];
   store.set('grade', state.grade);
   store.set('day', state.day);
   store.set('ex', state.ex);
+  const timeline = buildTimeline(ex, day.meter);
+  loadTimeline(timeline, {
+    title: `Grade ${COURSE[state.grade].grade} · Day ${day.day} · ${ex.title}`,
+    tip: ex.tip,
+    tempo: exerciseTempo(COURSE[state.grade].grade, ex, timeline.meter),
+  });
+}
+
+function loadTimeline(timeline, { title, tip, tempo }) {
   player.stop();
   setPlaying(false);
-  state.timeline = buildTimeline(ex, day.meter);
-  player.load(state.timeline);
-  $('exTitle').textContent = `Grade ${COURSE[state.grade].grade} · Day ${day.day} · ${ex.title}`;
-  const [num, den] = state.timeline.meter;
-  $('exTip').textContent = `${ex.tip}  (Time: ${num}/${den})`;
-  updateBpmLabel();
-  tab.render(state.timeline);
+  state.timeline = timeline;
+  player.load(timeline);
+  $('exTitle').textContent = title;
+  const [num, den] = timeline.meter;
+  $('exTip').textContent = `${tip ? tip + '  ' : ''}(Time: ${num}/${den} · tempo ${tempo})`;
+  state.autoTempo = tempo;
+  setTempo(tempo);
+  tab.render(timeline);
   goTo(0, false);
 }
+
+// ---------------------------------------------------------------- songs
+function showMode(mode) {
+  state.mode = mode;
+  store.set('mode', mode);
+  $('modeGrades').classList.toggle('on', mode === 'grades');
+  $('modeSongs').classList.toggle('on', mode === 'songs');
+  $('gradePickers').hidden = mode !== 'grades';
+  $('songPickers').hidden = mode !== 'songs';
+  if (mode === 'grades') refreshPickers();
+  else refreshSongs();
+}
+$('modeGrades').addEventListener('click', () => showMode('grades'));
+$('modeSongs').addEventListener('click', () => showMode('songs'));
+
+function refreshSongs() {
+  const sel = $('song');
+  const list = state.songs;
+  sel.innerHTML = list.length
+    ? list.map((s) => `<option value="${s.id}">${escapeHtml(s.title)}${s.origin === 'repo' ? '' : ' (this browser)'}</option>`).join('')
+    : '<option value="">No songs yet — click + Add song</option>';
+  const cur = list.find((s) => s.id === state.songId) || list[0];
+  $('exportSong').disabled = $('deleteSong').disabled = !cur;
+  if (!cur) {
+    loadTimeline(buildTimeline({ bars: [[{ beats: 4, rest: true, notes: [] }]] }), {
+      title: 'Songs',
+      tip: 'Add a song from a MusicXML, MIDI or text tab file.',
+      tempo: 100,
+    });
+    return;
+  }
+  sel.value = cur.id;
+  $('deleteSong').disabled = cur.origin !== 'local';
+  loadSong(cur);
+}
+$('song').addEventListener('change', (e) => {
+  const s = state.songs.find((x) => x.id === e.target.value);
+  if (s) loadSong(s);
+});
+
+function loadSong(song) {
+  state.songId = song.id;
+  store.set('songId', song.id);
+  $('deleteSong').disabled = song.origin !== 'local';
+  loadTimeline(buildTimeline({ bars: song.bars, meter: song.meter }), {
+    title: song.title,
+    tip: song.origin === 'repo' ? 'From the songs/ folder.' : `Imported from ${song.source || 'a file'} (saved in this browser).`,
+    tempo: song.tempo || 100,
+  });
+}
+
+const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+function toast(msg, ms = 3500) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (t.hidden = true), ms);
+}
+
+// import dialog
+let pending = null;
+$('songFile').accept = ACCEPT;
+$('addSong').addEventListener('click', () => {
+  pending = null;
+  $('importPreview').hidden = true;
+  $('impError').hidden = true;
+  $('impSave').disabled = true;
+  $('importPanel').hidden = false;
+});
+$('pickFile').addEventListener('click', () => $('songFile').click());
+$('impCancel').addEventListener('click', () => ($('importPanel').hidden = true));
+$('songFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  $('impError').hidden = true;
+  try {
+    const song = await importFile(file);
+    const events = song.bars.flat().filter((x) => !x.rest).length;
+    if (!events) throw new Error('No notes were found in this file.');
+    pending = song;
+    $('impTitle').value = song.title;
+    $('impTempo').value = song.tempo;
+    $('impInfo').textContent = `${song.source}: ${song.bars.length} bars, ${events} notes/chords, ${song.meter[0]}/${song.meter[1]} time.`;
+    $('importPreview').hidden = false;
+    $('impSave').disabled = false;
+  } catch (err) {
+    pending = null;
+    $('impSave').disabled = true;
+    $('impError').textContent = err.message || String(err);
+    $('impError').hidden = false;
+  }
+});
+$('impSave').addEventListener('click', () => {
+  if (!pending) return;
+  pending.title = $('impTitle').value.trim() || pending.title;
+  pending.tempo = Math.max(20, Math.min(300, Number($('impTempo').value) || pending.tempo));
+  const id = saveLocal(pending);
+  if (!id) {
+    $('impError').textContent = 'This browser’s storage is full — remove a song first.';
+    $('impError').hidden = false;
+    return;
+  }
+  state.songs.push({ ...pending, id, origin: 'local' });
+  state.songId = id;
+  pending = null;
+  $('importPanel').hidden = true;
+  refreshSongs();
+  toast('Song added. Use “Save file” to put it in the songs/ folder of your repo.');
+});
+$('exportSong').addEventListener('click', () => {
+  const s = state.songs.find((x) => x.id === state.songId);
+  if (s) {
+    downloadSong(s);
+    toast('Downloaded. Put it in songs/ and add its name to songs/index.json, then commit.', 6000);
+  }
+});
+$('deleteSong').addEventListener('click', () => {
+  const s = state.songs.find((x) => x.id === state.songId);
+  if (!s || s.origin !== 'local') return;
+  removeLocal(s.id);
+  state.songs = state.songs.filter((x) => x.id !== s.id);
+  state.songId = null;
+  refreshSongs();
+  toast(`Removed “${s.title}” from this browser.`);
+});
 
 // ---------------------------------------------------------------- steps
 function nextPlayable(i) {
@@ -201,18 +355,49 @@ function togglePlay() {
 }
 $('play').addEventListener('click', togglePlay);
 
-function updateBpmLabel() {
+// ---------------------------------------------------------------- tempo
+// state.tempo = the music's tempo (auto-set per exercise/song, editable); speed = practice percentage.
+let speed = Number(store.get('speed', 1));
+$('speed').value = String(speed);
+function setTempo(t, { restart = false } = {}) {
+  const v = Math.round(Math.max(20, Math.min(300, Number(t) || state.autoTempo)));
+  state.tempo = v;
+  player.bpm = Math.max(10, Math.round(v * speed));
+  $('bpmNum').value = String(v);
+  $('bpm').value = String(v);
+  syncSliders();
   const den = state.timeline?.meter[1] || 4;
-  $('bpmLabel').textContent = `${den === 8 ? '♪' : '♩'} = ${player.bpm}`;
+  $('bpmSym').textContent = `${den === 8 ? '♪' : '♩'} =`;
+  $('autoTempo').classList.toggle('on', v !== state.autoTempo);
+  $('autoTempo').title = `Back to this music's own tempo (${state.autoTempo})`;
+  $('bpmNum').title = speed === 1 ? 'Click to type a tempo' : `Playing at ${player.bpm} (${Math.round(speed * 100)}%)`;
+  if (restart && player.playing) player.play(state.index);
 }
-$('bpm').value = player.bpm = store.get('bpm', 60);
-$('bpm').addEventListener('input', (e) => {
-  player.bpm = Number(e.target.value);
-  store.set('bpm', player.bpm);
-  updateBpmLabel();
+$('bpm').addEventListener('input', (e) => setTempo(e.target.value));
+$('bpm').addEventListener('change', () => setTempo(state.tempo, { restart: true }));
+$('bpmNum').addEventListener('focus', (e) => e.target.select());
+$('bpmNum').addEventListener('change', (e) => setTempo(e.target.value, { restart: true }));
+$('bpmNum').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') e.target.blur();
+  if (e.key === 'Escape') {
+    e.target.value = String(state.tempo);
+    e.target.blur();
+  }
 });
-$('bpm').addEventListener('change', () => {
-  if (player.playing) player.play(state.index); // restart at the new tempo
+$('autoTempo').addEventListener('click', () => setTempo(state.autoTempo, { restart: true }));
+$('speed').addEventListener('change', (e) => {
+  speed = Number(e.target.value);
+  store.set('speed', speed);
+  setTempo(state.tempo, { restart: true });
+});
+
+// guitar tone
+$('tone').value = store.get('tone', 'acoustic');
+engine.setTone($('tone').value);
+$('tone').addEventListener('change', (e) => {
+  store.set('tone', e.target.value);
+  engine.setTone(e.target.value);
+  if ($('sound').classList.contains('on')) engine.preview({ notes: [{ s: 6, f: 0 }, { s: 5, f: 2 }, { s: 4, f: 2 }], strum: true, pick: 'd', beats: 1 }, 1);
 });
 
 function bindToggle(id, key, onChange) {
@@ -248,7 +433,7 @@ $('metVol').addEventListener('input', (e) => {
 
 // keyboard shortcuts
 window.addEventListener('keydown', (e) => {
-  if (e.target.matches('input, select')) return;
+  if (e.target.matches('input, select, textarea') || !$('importPanel').hidden) return;
   if (e.code === 'Space') {
     e.preventDefault();
     togglePlay();
@@ -257,5 +442,10 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyM') $('metro').click();
 });
 
-refreshPickers();
+upgradeAll();
+showMode(state.mode);
+loadLibrary().then((songs) => {
+  state.songs = songs;
+  if (state.mode === 'songs') refreshSongs();
+});
 window.__app = { state, guitar, hand3d, pickHand, player, goTo, HAND_TUNING }; // handy for debugging in the console

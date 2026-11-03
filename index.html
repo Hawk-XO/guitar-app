@@ -17,25 +17,51 @@
   <body>
     <header class="topbar">
       <div class="brand">Fretboard coach</div>
-      <div class="pickers">
+      <div class="mode" role="tablist" aria-label="Library">
+        <button id="modeGrades" role="tab" class="on">Grades</button>
+        <button id="modeSongs" role="tab">Songs</button>
+      </div>
+      <div class="pickers" id="gradePickers">
         <label>Grade <select id="grade"></select></label>
         <label>Day <select id="day"></select></label>
         <label>Exercise <select id="exercise"></select></label>
+      </div>
+      <div class="pickers" id="songPickers" hidden>
+        <label>Song <select id="song"></select></label>
+        <button id="addSong" title="Import MusicXML, MIDI or text tab">+ Add song</button>
+        <button id="exportSong" title="Download this song as a file for the songs/ folder">Save file</button>
+        <button id="deleteSong" title="Remove this song from this browser">Remove</button>
+        <input id="songFile" type="file" hidden />
       </div>
       <div class="transport">
         <button id="restart" title="Back to start" aria-label="Back to start">⏮</button>
         <button id="prev" title="Previous note (←)" aria-label="Previous note">◀</button>
         <button id="play" class="primary" title="Play / pause (space)">▶ Play</button>
         <button id="next" title="Next note (→)" aria-label="Next note">▶</button>
-        <label class="bpm">
-          <span id="bpmLabel">♩ = 60</span>
-          <input id="bpm" type="range" min="30" max="160" step="1" value="60" />
-        </label>
+        <div class="bpm">
+          <span id="bpmSym" class="bpm-sym">♩ =</span>
+          <input id="bpmNum" class="bpm-num" type="number" min="20" max="300" step="1" value="60" title="Click to type a tempo" aria-label="Tempo in beats per minute" />
+          <input id="bpm" type="range" min="20" max="300" step="1" value="60" style="width: 110px" aria-label="Tempo" />
+          <button id="autoTempo" class="small-btn" title="Back to this music's own tempo">Auto</button>
+          <select id="speed" title="Practice speed" aria-label="Practice speed">
+            <option value="1">100%</option>
+            <option value="0.9">90%</option>
+            <option value="0.75">75%</option>
+            <option value="0.6">60%</option>
+            <option value="0.5">50%</option>
+            <option value="0.25">25%</option>
+          </select>
+        </div>
         <button id="metro" class="toggle on" title="Metronome on/off (M)">Click on</button>
         <input id="metVol" type="range" min="0" max="1" step="0.05" value="0.6" title="Metronome volume" aria-label="Metronome volume" />
         <button id="countIn" class="toggle on" title="One bar of clicks before playing">Count-in</button>
         <button id="loop" class="toggle on" title="Repeat the exercise">Loop</button>
-        <button id="sound" class="toggle on" title="Reference guitar sound">Guitar sound</button>
+        <button id="sound" class="toggle on" title="Reference guitar sound on/off">Guitar sound</button>
+        <select id="tone" title="Guitar tone" aria-label="Guitar tone">
+          <option value="acoustic">Acoustic</option>
+          <option value="clean">Clean electric</option>
+          <option value="dist">Distorted electric</option>
+        </select>
       </div>
     </header>
 
@@ -83,6 +109,24 @@
     </main>
 
     <div id="tooltip" class="tooltip" hidden></div>
+    <div id="toast" class="toast" hidden></div>
+    <div id="importPanel" class="import-panel" hidden>
+      <div class="import-card">
+        <div class="import-head">Add a song</div>
+        <p class="muted small">MusicXML (.musicxml, .xml, .mxl), MIDI (.mid) or plain-text tab (.txt). Picture-only PDFs need converting to MusicXML first, e.g. with Audiveris or MuseScore.com’s PDF import.</p>
+        <button id="pickFile" class="primary">Choose file…</button>
+        <div id="importPreview" hidden>
+          <label>Title <input id="impTitle" type="text" /></label>
+          <label>Tempo <input id="impTempo" type="number" min="20" max="300" /></label>
+          <div id="impInfo" class="muted small"></div>
+        </div>
+        <div id="impError" class="imp-error" hidden></div>
+        <div class="import-actions">
+          <button id="impCancel">Cancel</button>
+          <button id="impSave" class="primary" disabled>Add to songs</button>
+        </div>
+      </div>
+    </div>
     <script type="module" src="src/main.js"></script>
   </body>
 </html>

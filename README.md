@@ -30,6 +30,14 @@ Needs an internet connection the first time (three.js loads from a CDN).
 | Click a finger (hand panel or 3D marker) | Highlights that finger in both places |
 | View buttons | Like the tab · Player view · Audience · Behind neck |
 | 3D hands + slider | Show/hide both hands and set how see-through they are |
+| Grades / Songs | Switch between the course exercises and your songs |
+| + Add song | Import MusicXML (.musicxml/.xml/.mxl), MIDI (.mid) or text tab (.txt) |
+| Save file | Download a song as JSON for the `songs/` folder (see `songs/README.md`) |
+| Tempo number | Click and type a tempo; it's set automatically per exercise/song. **Auto** resets it |
+| Speed | Practice at 25–100% of the tempo |
+| Tone | Acoustic, Clean electric or Distorted electric |
+
+**Picture-only PDFs** (scanned or exported images) can't be read directly. Convert them to MusicXML with a sheet-music reader such as Audiveris (free) or MuseScore.com's PDF import, then use **+ Add song**.
 
 ## Project layout
 
@@ -46,6 +54,10 @@ src/theory.js       tuning, note names, explanations
 src/data/chords.js  chord shapes with fingerings
 src/data/exercises.js  Grades 1–2 + timeline builder
 src/data/grades3to6.js Grades 3–6
+src/import/          MusicXML, MIDI and text-tab importers + automatic fret/finger choice
+src/songs.js        song library (songs/ folder + this browser)
+src/slider.js       custom sliders (consistent look in Opera GX and other browsers)
+songs/              songs shown to everyone on the site (index.json lists them)
 assets/             hand models (MIT, see HAND-MODEL-LICENSE.md)
 ```
 
